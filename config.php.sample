@@ -1,0 +1,25 @@
+<?php
+$logfile = ""; // Log file to be parsed (currently from WirelessThings / MessageBridge CSV)
+
+// Thingsboard
+
+$apiurl = ""; // Thingsboard API URL
+
+// MQTT
+
+$mqtt_server_ip=""; //MQTT Server IP Address
+$mqtt_server_port=""; //MQTT Server Port
+$mqtt_server_user=""; //MQTT Server Username
+$mqtt_server_pw=""; //MQTT Server Password
+
+// Channels
+
+$channel["sensor_1_code"]["token"] = ""; //ThingsBoard channel token
+$channel["sensor_1_code]["topic"] = ""; //MQTT topic to publish under
+
+$channel["sensor_2_code"]["token"] = ""; //ThingsBoard channel token
+$channel["sensor_2_code]["topic"] = ""; //MQTT topic to publish under
+
+// keep adding your channels ...
+
+?>
