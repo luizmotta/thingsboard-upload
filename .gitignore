@@ -1,2 +1,2 @@
 config.php
-upload.php.pid
+*.pid

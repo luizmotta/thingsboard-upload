@@ -16,6 +16,7 @@ $mqtt_server_pw=""; //MQTT Server Password
 
 $channel["sensor_1_code"]["token"] = ""; //ThingsBoard channel token
 $channel["sensor_1_code]["topic"] = ""; //MQTT topic to publish under
+$channel["sensor_1_code]["dont_retain"] = true; //optional: MQTT topic not to be retained
 
 $channel["sensor_2_code"]["token"] = ""; //ThingsBoard channel token
 $channel["sensor_2_code]["topic"] = ""; //MQTT topic to publish under

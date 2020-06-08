@@ -1,5 +1,6 @@
 #!/usr/bin/php
 <?php
+
 include 'config.php';
 
 if( @$argv[1] != "" ) {
@@ -7,9 +8,8 @@ if( @$argv[1] != "" ) {
 }
 
 $lastprocessedfile = $logfile . ".lastprocessed";
-$lineold = "";
-$history = array();
-
+//$history = array();
+$last_datapoint_line = "";
  
 // Check for another running instance
 $lock_file = fopen(__FILE__.'.pid', 'c');
@@ -43,6 +43,7 @@ if ( $lastprocessed === false  ) { //If file was not present
 
 foreach ( $log as $linenumber => $line ) {
 
+
         $lineold = $line;
 
         $linedata = explode( ",", $line);
@@ -62,6 +63,9 @@ foreach ( $log as $linenumber => $line ) {
         } else if ( substr( $cmd, 0, 4) == "LVAL" ) {
                 $field = "LVAL";
                 $data = trim( substr( $cmd, 4) );
+        } else if ( substr( $cmd, 0, 4) == "TILT" ) {
+                $field = "TILT";
+                $data = trim( substr( $cmd, 4) );
         } else if ( substr( $cmd, 0, 3) == "LUX" ) {
                 $field = "LUX";
                 $data = trim( substr( $cmd, 3) );
@@ -71,11 +75,14 @@ foreach ( $log as $linenumber => $line ) {
         }
 
 	$channel_token = $channel[$sensor]["token"];
+	$mqtt_topic = $channel[$sensor]["topic"];
+	$mqtt_retain = @$channel[$sensor]["dont_retain"] ? false : true;
+	$run_cmd = @$channel[$sensor]["run"];
+	$max_freq = @$channel[$sensor]["max_freq"];
+
         if ( $channel_token == "" ) {
                 continue;
         }
-
-	$mqtt_topic = $channel[$sensor]["topic"];
 
 	$datapoint = array();
 	$datapoint[ "line" ] = $line;
@@ -85,19 +92,20 @@ foreach ( $log as $linenumber => $line ) {
 	$datapoint[ "field" ] = $field;
 	$datapoint[ "data" ] = $data;
 
-	//Check for repeated messages and ignore if found
-	foreach( $history as $old_datapoint ) {
-		if( $old_datapoint[ "line" ] == $datapoint[ "line" ] ) {
-			continue 2;
-		}
-	}
+        //Check for repeated messages and ignore if found
+        //foreach( $history as $old_datapoint ) {
+        //        if( $old_datapoint[ "line" ] == $datapoint[ "line" ] ) {
+        //                continue 2;
+        //        }
+        //}
+        //Otherwise, add to history
+        //$history[] = $datapoint;
 
-	//Otherwise, add to history
-	$history[] = $datapoint;
-
-	//Ignore everything up to lastprocessed
-        if ( $linenumber <= $lastprocessed ) {
+        //Ignore consecutive repeated lines
+        if( $datapoint[ "line" ] == $last_datapoint_line ) {
                 continue;
+        } else {
+                $last_datapoint_line = $datapoint[ "line" ];
         }
 
         //print_r("|".$datetime."|");
@@ -113,14 +121,23 @@ foreach ( $log as $linenumber => $line ) {
 	if( $field == "LUX" ) { $post_data["values"]["lux"] = floatval( $data ); }
 	if( $field == "TILT" ) { $post_data["values"]["tilt"] = true; }
 
-	/*
-	$post_data = array();
-	if( $field == "RHUM" ) { $post_data["humidity"] = floatval($data); }
-	if( $field == "TEMP" ) { $post_data["temperature"] = floatval($data) ; }
-	if( $field == "BATT" ) { $post_data["voltage"] = floatval($data); }
-	if( $field == "LVAL" ) { $post_data["luminosity"] = floatval($data); }
-	if( $field == "TILT" ) { $post_data["tilt"] = $data ? true : false; }
-	*/
+	//Debounce
+	if( $max_freq ) {
+		if( $dt->getTimestamp() - @$last_alert[$sensor] <= $max_freq ) { //dont repeat alerts in less than X seconds
+			continue;
+		}
+		$last_alert[$sensor] = $dt->getTimestamp();
+	}
+
+	//Ignore everything up to lastprocessed
+        if ( $linenumber <= $lastprocessed ) {
+                continue;
+        }
+
+	if( $run_cmd <> '' ) {
+		error_log( 'Running: ' . $run_cmd );
+		exec( $run_cmd );
+	}
 
        	$url = $apiurl . $channel_token . "/telemetry";
 	$ch = curl_init( $url );
@@ -147,9 +164,10 @@ foreach ( $log as $linenumber => $line ) {
         }
 
 	$topic = $mqtt_topic . array_pop( array_keys( $post_data["values"] ) );
+	$retain_flag = $mqtt_retain ? "-r" : "";
 	$message = array_pop( $post_data["values"] );
-	$cmd = "mosquitto_pub -r -h '$mqtt_server_ip' -p '$mqtt_server_port' -u '$mqtt_server_user' -P '$mqtt_server_pw' -t '$topic' -m $message";
-	//echo $cmd . "\r\n";
+	$cmd = "mosquitto_pub $retain_flag -h '$mqtt_server_ip' -p '$mqtt_server_port' -u '$mqtt_server_user' -P '$mqtt_server_pw' -t '$topic' -m $message";
+	error_log( $cmd );
 	exec( $cmd, $output, $result );
         if ( $result != 0 ) {
                 die("Couldn't update MQTT");
